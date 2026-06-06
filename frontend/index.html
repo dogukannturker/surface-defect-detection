@@ -113,7 +113,7 @@
             const model = document.getElementById("modelSelect").value;
             const thresh = document.getElementById("threshold").value;
 
-            const res = await fetch(`${API_URL}/start?product_name=${encodeURIComponent(name)}&product_id=${encodeURIComponent(id)}&model_name=${model}&threshold=${thresh}`, { method: 'POST' });
+            const res = await fetch(`http://127.0.0.1:8000/api/start?product_name=${encodeURIComponent(name)}&product_id=${encodeURIComponent(id)}&model_name=${model}&threshold=${thresh}`, { method: 'POST' });
             if (res.ok) {
                 document.getElementById("systemStatus").innerText = `ÇALIŞIYOR (${model})`;
                 document.getElementById("systemStatus").className = "text-sm font-bold text-green-600";
