@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mini Yüzey Hatası Tespit Operatör Paneli</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+
+<body class="bg-gray-100 font-sans antialiased text-gray-800">
+
+    <div class="container mx-auto px-4 py-8 max-w-5xl">
+        <header class="mb-8 text-center">
+            <h1 class="text-3xl font-bold text-blue-900">Alüminyum Yüzey Hatası Tespit Sistemi</h1>
+            <p class="text-gray-600 mt-2">Operatör Kontrol Paneli Prototipi</p>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="bg-white p-6 rounded-lg shadow-md md:col-span-1">
+                <h2 class="text-xl font-semibold mb-4 border-b pb-2 text-gray-700">Sistem Kontrolü</h2>
+
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Ürün Adı</label>
+                    <input type="text" id="productName" value="Alüminyum Profil X"
+                        class="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Ürün Etiketi / ID</label>
+                    <input type="text" id="productId" value="ALM-2026-001"
+                        class="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Aktif Yapay Zeka Modeli</label>
+                    <select id="modelSelect"
+                        class="w-full border rounded px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 outline-none">
+                        <option value="Mock_Mode">Mock (Simülasyon Modu)</option>
+                        <option value="YOLOv11n">YOLOv11n (best.pt)</option>
+                        <option value="YOLOv26n">YOLOv26n (best.pt)</option>
+                    </select>
+                </div>
+
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Güven Eşik Değeri (Threshold)</label>
+                    <div class="flex items-center gap-3">
+                        <input type="range" id="threshold" min="0.1" max="0.9" step="0.05" value="0.25"
+                            class="w-full accent-blue-600"
+                            oninput="document.getElementById('threshVal').innerText = this.value">
+                        <span id="threshVal" class="font-mono font-bold text-blue-600">0.25</span>
+                    </div>
+                </div>
+
+                <div class="space-y-3">
+                    <button id="btnStart" onclick="startSystem()"
+                        class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded transition shadow">▶
+                        BAŞLAT</button>
+                    <button id="btnStop" onclick="stopSystem()"
+                        class="w-full bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 rounded transition shadow hidden">⏸
+                        DURDUR</button>
+                    <button id="btnReset" onclick="resetSystem()"
+                        class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 rounded transition shadow">🔄
+                        RESETLE</button>
+                    <button id="btnReport" onclick="getReport()"
+                        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded transition shadow">📊
+                        RAPOR OLUŞTUR</button>
+                </div>
+
+                <div class="mt-6 p-3 bg-gray-50 rounded text-center border">
+                    <span class="text-sm font-medium">Sistem Durumu: </span>
+                    <span id="systemStatus" class="text-sm font-bold text-gray-500">BEKLEMEDE</span>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-lg shadow-md md:col-span-2 flex flex-col">
+                <h2 class="text-xl font-semibold mb-4 border-b pb-2 text-gray-700 flex justify-between items-center">
+                    <span>Canlı Tespit Sonuçları</span>
+                    <span id="errorCount" class="text-sm bg-red-100 text-red-800 px-2.5 py-0.5 rounded-full font-bold">0
+                        Hata</span>
+                </h2>
+
+                <div class="overflow-x-auto flex-grow max-h-[450px]">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Hata Tipi
+                                </th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Metre
+                                    Bilgisi</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Güven Skoru
+                                </th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Zaman
+                                    Bilgisi</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kaynak</th>
+                            </tr>
+                        </thead>
+                        <tbody id="errorTableBody" class="bg-white divide-y divide-gray-200 text-sm">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = "http://127.0.0.1:8000/api";
+        let streamInterval = null;
+
+        async function startSystem() {
+            const name = document.getElementById("productName").value;
+            const id = document.getElementById("productId").value;
+            const model = document.getElementById("modelSelect").value;
+            const thresh = document.getElementById("threshold").value;
+
+            const res = await fetch(`${API_URL}/start?product_name=${encodeURIComponent(name)}&product_id=${encodeURIComponent(id)}&model_name=${model}&threshold=${thresh}`, { method: 'POST' });
+            if (res.ok) {
+                document.getElementById("systemStatus").innerText = `ÇALIŞIYOR (${model})`;
+                document.getElementById("systemStatus").className = "text-sm font-bold text-green-600";
+                document.getElementById("btnStart").classList.add("hidden");
+                document.getElementById("btnStop").classList.remove("hidden");
+
+                // Periyodik olarak backend'den canlı verileri çekmeye başla (Her 2 saniyede bir)
+                streamInterval = setInterval(fetchStream, 2000);
+            }
+        }
+
+        async function stopSystem() {
+            const res = await fetch(`${API_URL}/stop`, { method: 'POST' });
+            if (res.ok) {
+                clearInterval(streamInterval);
+                document.getElementById("systemStatus").innerText = "DURDURULDU";
+                document.getElementById("systemStatus").className = "text-sm font-bold text-yellow-600";
+                document.getElementById("btnStop").classList.add("hidden");
+                document.getElementById("btnStart").classList.remove("hidden");
+            }
+        }
+
+        async function resetSystem() {
+            const res = await fetch(`${API_URL}/reset`, { method: 'POST' });
+            if (res.ok) {
+                clearInterval(streamInterval);
+                document.getElementById("systemStatus").innerText = "BEKLEMEDE";
+                document.getElementById("systemStatus").className = "text-sm font-bold text-gray-500";
+                document.getElementById("btnStop").classList.add("hidden");
+                document.getElementById("btnStart").classList.remove("hidden");
+                document.getElementById("errorTableBody").innerHTML = "";
+                document.getElementById("errorCount").innerText = "0 Hata";
+            }
+        }
+
+        async function fetchStream() {
+            const res = await fetch(`${API_URL}/stream`);
+            if (res.ok) {
+                const data = await res.json();
+                if (data.status === "running") {
+                    updateTable(data.all_errors);
+                }
+            }
+        }
+
+        function updateTable(errors) {
+            const tbody = document.getElementById("errorTableBody");
+            tbody.innerHTML = "";
+            document.getElementById("errorCount").innerText = `${errors.length} Hata`;
+
+            // En yeni hatayı en üstte göstermek için listeyi ters çeviriyoruz
+            [...errors].reverse().forEach(err => {
+                const row = `<tr>
+                    <td class="px-4 py-3 whitespace-nowrap font-medium text-red-600">${err.defect_type}</td>
+                    <td class="px-4 py-3 whitespace-nowrap font-mono">${err.meter} m</td>
+                    <td class="px-4 py-3 whitespace-nowrap"><span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded font-bold">%${Math.round(err.confidence * 100)}</span></td>
+                    <td class="px-4 py-3 whitespace-nowrap text-gray-500">${err.timestamp}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-xs text-gray-400 font-mono">${err.model_used || 'Mock'}</td>
+                </tr>`;
+                tbody.innerHTML += row;
+            });
+        }
+
+        async function getReport() {
+            const res = await fetch(`${API_URL}/report`);
+            if (res.ok) {
+                const reportData = await res.json();
+                // Rapor verisini güzel bir JSON string formatında operatöre ekranda gösteriyoruz
+                alert("📊 PDF Özet Rapor Çıktısı (Konsol ve Ekranda):\n\n" + JSON.stringify(reportData, null, 2));
+                console.log("Üretilen Sistem Raporu:", reportData);
+            }
+        }
+    </script>
+</body>
+
+</html>
